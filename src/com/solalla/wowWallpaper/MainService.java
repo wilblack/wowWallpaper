@@ -30,6 +30,7 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -38,6 +39,8 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
@@ -54,8 +57,12 @@ import android.view.SurfaceHolder;
 public class MainService extends WallpaperService {
 	static String TAG = "ImageEngine";
 	
+	int updateFreqLong = 6*60*60*1000;
+	int updateFreqShort = 60*60*1000;
+	
     private final Handler mHandler = new Handler();
 
+    
     @Override
     public void onCreate() {
         super.onCreate();
@@ -77,19 +84,20 @@ public class MainService extends WallpaperService {
         Bitmap pic = BitmapFactory.decodeResource(getResources(), R.drawable.coiler);
         private boolean mVisible = false;
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainService.this);
-        
-        
-        
+               
         private final Handler mHandler = new Handler();
         private final Runnable mUpdateDisplay = new Runnable() {
         	public void run() {draw();}
         };
-        
-        
+                
         void draw(){
         	
-        	Bitmap rawBgImage = getImage();
-        	       	
+        	if (!haveNetwork()){
+        		mHandler.postDelayed(mUpdateDisplay, updateFreqShort);
+        		return;
+        	}
+        	
+        	Bitmap rawBgImage = getImage();      	
         	SurfaceHolder holder = getSurfaceHolder();
             Canvas c = null;
             try {
@@ -112,35 +120,33 @@ public class MainService extends WallpaperService {
             	holder.unlockCanvasAndPost(c);
             }
             mHandler.removeCallbacks(mUpdateDisplay);
+            mHandler.postDelayed(mUpdateDisplay, updateFreqLong);
+            
         }
-        
-        
+                
         Bitmap getImage(){
         	Bitmap img = null;
         	
         	String imageUrl = null;
         	String name = prefs.getString("name", "coiler");
         	String realm = prefs.getString("realm", "dragonmaw");
-        	Log.d( TAG, "realm: " +  realm);
-        	Log.d( TAG, "name: " + name );
+        	//Log.d( TAG, "realm: " +  realm);
+        	//Log.d( TAG, "name: " + name );
         	
         	String characterUrl = "http://us.battle.net/api/wow/character/"+realm+"/"+name; 
-        	Log.d(TAG, "characterUrl: " +characterUrl);
-        	
-        	
+        	//Log.d(TAG, "characterUrl: " +characterUrl);
+        	        	
 			try {
 				imageUrl = fetchImageUrl(characterUrl);
 			} catch (ClientProtocolException e) {
 				Log.d(TAG,"Failed to execute httpclient"+e.toString());
-				
 			} catch (IOException e) {
 				Log.d(TAG,"Failed to fetch image url "+e.toString());
 			} catch (JSONException e) {
 				Log.d(TAG,"Could not parse JSON from WoW "+e.toString());
 			}
-        	Log.d(TAG, "imageUrl: " +imageUrl);
-        	
-        	
+        	//Log.d(TAG, "imageUrl: " +imageUrl);
+        	        	
         	if (imageUrl == null){
         		img =  BitmapFactory.decodeResource(getResources(), R.drawable.coiler);
         	
@@ -158,8 +164,7 @@ public class MainService extends WallpaperService {
         	       	
         	return img;
         }
-        
-        
+                
         public String fetchImageUrl(String url) throws ClientProtocolException, IOException, JSONException{
         	        	
         	Log.d(TAG,"In connect()");
@@ -247,31 +252,24 @@ public class MainService extends WallpaperService {
         	        	
             int width = c.getWidth();
             int height = c.getHeight();
-            Log.d(TAG,"Canvas H x W: " + height + " x "+ width);
+            //Log.d(TAG,"Canvas H x W: " + height + " x "+ width);
                         
             int oldWidth= img.getWidth();
             int oldHeight= img.getHeight();
-            Log.d(TAG,"Image H x W: " + oldHeight + " x "+ oldWidth);
+            //Log.d(TAG,"Image H x W: " + oldHeight + " x "+ oldWidth);
             
             float aspectRatio = ((float) oldWidth) / oldHeight;
                         
             int newHeight = height;
             int newWidth = (int) Math.floor( newHeight * aspectRatio);
-            Log.d(TAG,"New Image H x W: " + newHeight + " x "+ newWidth);
-                        
-            /*
-            Matrix m = new Matrix();
-            m.postScale(wRatio, hRatio);
-
-            Bitmap out = Bitmap.createBitmap(img, 0, 0, 
-                    width, height, m, true);
-            */
+            //Log.d(TAG,"New Image H x W: " + newHeight + " x "+ newWidth);
+                       
             Bitmap scaled = Bitmap.createScaledBitmap(img, newWidth, newHeight, false);      
-            Log.d(TAG, "Scaled width: "+scaled.getWidth());
+            //Log.d(TAG, "Scaled width: "+scaled.getWidth());
             
             int startX = (int) Math.floor(newWidth * 0.25);
             newWidth = (int) Math.floor(newWidth * 0.50);
-            Log.d(TAG,"startX : " + startX + " newWidth: "+ newWidth);
+            //Log.d(TAG,"startX : " + startX + " newWidth: "+ newWidth);
                                 
             Bitmap out = Bitmap.createBitmap(scaled, startX, 0, newWidth, newHeight); 
             
@@ -306,7 +304,23 @@ public class MainService extends WallpaperService {
 	        mVisible = false;
 	        mHandler.removeCallbacks(mUpdateDisplay);
         }
-                
+        
+        public boolean haveNetwork() {
+        	ConnectivityManager connectivity = (ConnectivityManager) MainService.this.getSystemService(Context.CONNECTIVITY_SERVICE);
+	        if (connectivity != null) {
+	            NetworkInfo[] info = connectivity.getAllNetworkInfo();
+	            if (info != null) {
+	                for (int i = 0; i < info.length; i++) {
+	                    if (info[i].getState() == NetworkInfo.State.CONNECTED) {
+	                    	Log.d(TAG, "Connected to network");	
+	                    	return true;
+	                    }
+	                }
+	            }
+	        }
+	        Log.d(TAG, "Not connected to network");
+	        return false;
+        }
         
     } // End ImageEngine class
 }
