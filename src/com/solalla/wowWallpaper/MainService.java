@@ -101,12 +101,12 @@ public class MainService extends WallpaperService {
                     c.drawRect(0, 0, c.getWidth(), c.getHeight(), p);
                     
                     //Scale the image
-                    //Bitmap bgImage = scaleImage(rawBgImage, c);
+                    Bitmap bgImage = scaleImage(rawBgImage, c);
                     
                     // Draw the background image
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inPurgeable = true;                   
-                    c.drawBitmap(rawBgImage, 0, 0, null);
+                    c.drawBitmap(bgImage, 0, 0, null);
                     }
             } finally {
             	holder.unlockCanvasAndPost(c);
@@ -247,17 +247,34 @@ public class MainService extends WallpaperService {
         	        	
             int width = c.getWidth();
             int height = c.getHeight();
-
+            Log.d(TAG,"Canvas H x W: " + height + " x "+ width);
+                        
             int oldWidth= img.getWidth();
             int oldHeight= img.getHeight();
-            float wRatio = ((float) oldWidth) / width;
-            float hRatio = ((float) oldHeight) / height;
+            Log.d(TAG,"Image H x W: " + oldHeight + " x "+ oldWidth);
             
+            float aspectRatio = ((float) oldWidth) / oldHeight;
+                        
+            int newHeight = height;
+            int newWidth = (int) Math.floor( newHeight * aspectRatio);
+            Log.d(TAG,"New Image H x W: " + newHeight + " x "+ newWidth);
+                        
+            /*
             Matrix m = new Matrix();
             m.postScale(wRatio, hRatio);
 
             Bitmap out = Bitmap.createBitmap(img, 0, 0, 
                     width, height, m, true);
+            */
+            Bitmap scaled = Bitmap.createScaledBitmap(img, newWidth, newHeight, false);      
+            Log.d(TAG, "Scaled width: "+scaled.getWidth());
+            
+            int startX = (int) Math.floor(newWidth * 0.25);
+            newWidth = (int) Math.floor(newWidth * 0.50);
+            Log.d(TAG,"startX : " + startX + " newWidth: "+ newWidth);
+                                
+            Bitmap out = Bitmap.createBitmap(scaled, startX, 0, newWidth, newHeight); 
+            
             return out;
         }
         
