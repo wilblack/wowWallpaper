@@ -35,6 +35,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.os.Handler;
@@ -87,8 +88,8 @@ public class MainService extends WallpaperService {
         
         void draw(){
         	
-        	Bitmap bgImage = getImage();
-        	        	        	
+        	Bitmap rawBgImage = getImage();
+        	       	
         	SurfaceHolder holder = getSurfaceHolder();
             Canvas c = null;
             try {
@@ -98,11 +99,14 @@ public class MainService extends WallpaperService {
                     Paint p = new Paint();
                     p.setColor(Color.BLACK);
                     c.drawRect(0, 0, c.getWidth(), c.getHeight(), p);
-                                        
-                    // Draw the backgound image
+                    
+                    //Scale the image
+                    //Bitmap bgImage = scaleImage(rawBgImage, c);
+                    
+                    // Draw the background image
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inPurgeable = true;                   
-                    c.drawBitmap(bgImage, 0, 0, null);
+                    c.drawBitmap(rawBgImage, 0, 0, null);
                     }
             } finally {
             	holder.unlockCanvasAndPost(c);
@@ -151,7 +155,7 @@ public class MainService extends WallpaperService {
 					img =  BitmapFactory.decodeResource(getResources(), R.drawable.coiler);
 				}
         	}
-        	
+        	       	
         	return img;
         }
         
@@ -236,6 +240,25 @@ public class MainService extends WallpaperService {
             }
           
             return bitmap;
+        }
+        
+        
+        private Bitmap scaleImage(Bitmap img, Canvas c){
+        	        	
+            int width = c.getWidth();
+            int height = c.getHeight();
+
+            int oldWidth= img.getWidth();
+            int oldHeight= img.getHeight();
+            float wRatio = ((float) oldWidth) / width;
+            float hRatio = ((float) oldHeight) / height;
+            
+            Matrix m = new Matrix();
+            m.postScale(wRatio, hRatio);
+
+            Bitmap out = Bitmap.createBitmap(img, 0, 0, 
+                    width, height, m, true);
+            return out;
         }
         
         @Override
