@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Date;
+import java.util.Random;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -31,6 +32,7 @@ import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -51,8 +53,13 @@ import android.view.SurfaceHolder;
 
 /*
  * This animated wallpaper draws WoW armory based image
+ * Examples API URL's
  * http://us.battle.net/static-render/us/dragonmaw/218/84972250-profilemain.jpg
+ *  
+ * http://us.battle.net/api/wow/character/dragonmaw/coiler
  * 
+ * API Documentation
+ * http://blizzard.github.com/api-wow-docs/
  */
 public class MainService extends WallpaperService {
 	static String TAG = "ImageEngine";
@@ -78,7 +85,73 @@ public class MainService extends WallpaperService {
     public Engine onCreateEngine() {
         return new ImageEngine();
     }
-   
+    
+    static public class Toon {
+    	Bitmap rawImage;
+    	String title="";
+    	String gearScore="";
+    	String guild="";
+    	
+    	static String getWowTitle(JSONObject info){
+    		String out=null;
+    		JSONObject obj;
+    		JSONArray titles = null;
+    		
+    		
+			try {
+				titles = info.getJSONArray("titles");
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				Log.d(TAG, e.toString());
+			}
+    		    		
+    		for (int i=0; i<titles.length(); i++){
+    			 try {
+					obj = (JSONObject) titles.get(i);
+					obj.get("selected");
+					out = obj.getString("name");
+				} catch (JSONException e) {}   			 
+    		}
+    		
+    		// If no title is selected choice a random one
+    		if (out == null){
+    			Random randomGenerator = new Random();
+    			int index = randomGenerator.nextInt(titles.length());
+    			
+    			try {
+					out = titles.getString(index);
+				} catch (JSONException e) {
+					Log.d(TAG,e.toString());
+				}    			
+    		}
+    		
+    		try {
+				out = String.format(out, info.get("name"));
+			} catch (JSONException e) {
+				Log.d(TAG,e.toString());
+			}
+    		
+    		return out;
+    	}
+    	
+    	public static String getGearScore(JSONObject info) {
+    		TAG = "getGearScore";
+    		String out = "";
+    		
+    		try {
+	    		JSONObject items = info.getJSONObject("items");
+	    		int ail = items.getInt("averageItemLevel");
+	    		int aile = items.getInt("averageItemLevelEquipped");
+    		out = String.format("%s/%s", aile, ail);
+    		} catch (JSONException e){
+    			Log.d(TAG,"Could not get gear score: "+e.toString());
+    		}
+    			
+    		return out;
+    	}
+    	
+    }
+    
     class ImageEngine extends Engine {
     	   	       
         private boolean mVisible = false;
@@ -97,33 +170,30 @@ public class MainService extends WallpaperService {
         	long lastUpdated = prefs.getLong("lastUpdated", (long) 0);
         	boolean refresh = prefs.getBoolean("refresh", false);
         	Log.d(TAG, "refresh:" + refresh);
-        	
         	boolean needUpdate = false;       	
-        	long now = new Date().getTime();
-        	
-        	
+        	long now = new Date().getTime();       	
         	Bitmap rawBgImage = null;
         	Bitmap bgImage;
-        	
-        	SurfaceHolder holder = getSurfaceHolder();
-        	Canvas c = holder.lockCanvas();
         	
         	// Determine if we need an update based on whether we have a stored image or its out of date
         	if (lastUpdated == (long) 0 || now - lastUpdated > updateFreqLong || refresh) {
         		needUpdate = true;
-        		prefs.edit().putBoolean("refresh", false).commit();
-        	        		
+        		prefs.edit().putBoolean("refresh", false).commit();	
         	}
-        	
         	Log.d(TAG, "needUpdate: " + needUpdate);
         	
+        	SurfaceHolder holder = getSurfaceHolder();
+        	Canvas c = holder.lockCanvas();
+        	
+        	Toon toon;
         	if (haveNetwork() && needUpdate){
         		// We have a network and we need an update so fetch and scale image
-        		rawBgImage = fetchImage();
+        		toon = fetchToon();
         	} else {
         		// Get the old image        		
-        		rawBgImage = getLocalImage();	
+        		toon = getLocalToon();
             }
+        	rawBgImage = toon.rawImage;
         	bgImage = scaleImage(rawBgImage, c);
         	// Final catch
         	if (bgImage == null) {
@@ -134,15 +204,26 @@ public class MainService extends WallpaperService {
         	
         	try {
         		if (c != null) {
-                    //paint black
-                    Paint p = new Paint();
-                    p.setColor(Color.BLACK);
-                    c.drawRect(0, 0, c.getWidth(), c.getHeight(), p);
-                                       
-                    // Draw the background image
+        			Paint p = new Paint();
+        			
+        			// Draw the background image
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inPurgeable = true;                   
-                    c.drawBitmap(bgImage, 0, 0, null);
+                    c.drawBitmap(bgImage, 0, 0, p);
+        			
+                    //paint black
+                    p.setColor(Color.BLACK);
+                    c.drawRect(0, 0, c.getWidth(), 150, p);
+                    
+                    p.setColor(Color.WHITE);
+                    p.setTextSize(30);
+                    p.setTextAlign(Paint.Align.CENTER); 
+                    c.drawText(toon.title, c.getWidth()/2, 90, p);
+                    
+                    p.setColor(Color.GREEN);
+                    p.setTextSize(25);
+                    c.drawText("Gear score: "+toon.gearScore, c.getWidth()/2, 135, p);
+                    
                     }
             } finally {
             	holder.unlockCanvasAndPost(c);
@@ -152,17 +233,26 @@ public class MainService extends WallpaperService {
             
         }
          
-        Bitmap getLocalImage(){
-        	Bitmap img = null;
+        Toon getLocalToon(){
+        	Toon toon = new Toon();
         	
+        	// Get image
         	File dir = MainService.this.getFilesDir();
         	Log.d(TAG,"Trying to load: " + dir + "/"+ lastImageName);
-        	img = BitmapFactory.decodeFile(dir + "/"+ lastImageName);
-        	return img;
+        	toon.rawImage = BitmapFactory.decodeFile(dir + "/"+ lastImageName);
+        	
+        	// Get title
+        	toon.title = prefs.getString("title", "");
+        	toon.gearScore = prefs.getString("gearScore", "");
+        	return toon;
+        	
+        	
         }
         
-        Bitmap fetchImage(){
+        Toon fetchToon(){
+        	TAG = "fetchToon()";
         	Bitmap img = null;
+        	JSONObject info = null;
         	
         	String imageUrl = null;
         	String name = prefs.getString("name", "coiler");
@@ -170,11 +260,12 @@ public class MainService extends WallpaperService {
         	//Log.d( TAG, "realm: " +  realm);
         	//Log.d( TAG, "name: " + name );
         	
-        	String characterUrl = "http://us.battle.net/api/wow/character/"+realm+"/"+name; 
+        	String characterUrl = "http://us.battle.net/api/wow/character/"+realm+"/"+name+"?fields=titles,items";
         	//Log.d(TAG, "characterUrl: " +characterUrl);
         	        	
 			try {
-				imageUrl = fetchImageUrl(characterUrl);
+				info = fetchImageUrl(characterUrl);
+				imageUrl = info.getString("imageUrl");
 			} catch (ClientProtocolException e) {
 				Log.d(TAG,"Failed to execute httpclient"+e.toString());
 			} catch (IOException e) {
@@ -223,10 +314,23 @@ public class MainService extends WallpaperService {
         		prefs.edit().putLong("lastUpdated", new Date().getTime()).commit();
         	}
         	
-        	return img;
+        	// Make title
+        	String wowTitle = Toon.getWowTitle(info);
+        	prefs.edit().putString("title", wowTitle).commit();
+        	
+        	// Make gearScore
+        	String gs = Toon.getGearScore(info);
+        	prefs.edit().putString("gearScore", gs).commit();
+        	        	
+        	Toon toon = new Toon();
+        	toon.rawImage = img;
+        	toon.title = wowTitle;
+        	toon.gearScore = gs;
+        	        	
+        	return toon;
         }
                 
-        public String fetchImageUrl(String url) throws ClientProtocolException, IOException, JSONException{
+        public JSONObject fetchImageUrl(String url) throws ClientProtocolException, IOException, JSONException{
         	        	
         	Log.d(TAG,"In connect()");
         	HttpGet httpget = null;
@@ -272,8 +376,8 @@ public class MainService extends WallpaperService {
         	thumbnail = tmp[0] + "-profilemain.jpg";
         	
         	String imageUrl = "http://us.battle.net/static-render/us/"+thumbnail;
-        	Log.d(TAG,"imageUrl: " + imageUrl );
-        	return imageUrl;
+        	jArray.put("imageUrl", imageUrl);
+        	return jArray;
             
         }
         private Bitmap fetchImage(String url) throws ClientProtocolException, IOException
