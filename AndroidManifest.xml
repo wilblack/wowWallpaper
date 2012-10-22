@@ -19,7 +19,7 @@
 -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.solalla.wowWallpaper">
+    package="com.solalla.wowWallpaper" android:versionCode="1" android:versionName="0.1020">
     <uses-feature android:name="android.software.live_wallpaper" />
 
     <uses-sdk android:minSdkVersion="8"/>
